@@ -6,7 +6,7 @@ import re
 
 # 1. ตั้งค่า Page Config
 st.set_page_config(
-    page_title="Recorder NB1 Furnace",
+    page_title="Recorder NB3 Furnace",
     page_icon="🏭",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -154,24 +154,23 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # แสดงชื่อโปรแกรมหลัก
-st.title("🏭 Recorder NB1 Furnace")
+st.title("🏭 Recorder NB3 Furnace")
 
-# 3. ฟังก์ชันอ่านไฟล์ Excel อย่างปลอดภัย
-def read_excel_safe(uploaded_file):
-    try:
-        uploaded_file.seek(0)
-        return pd.read_excel(uploaded_file, header=None, engine='openpyxl')
-    except Exception:
+# 3. ฟังก์ชันอ่านไฟล์ CSV อย่างปลอดภัย
+def read_csv_safe(uploaded_file):
+    encodings = ['cp932', 'shift_jis', 'utf-8-sig', 'utf-8', 'tis-620', 'latin1']
+    for enc in encodings:
         try:
             uploaded_file.seek(0)
-            return pd.read_excel(uploaded_file, header=None, engine='xlrd')
+            return pd.read_csv(uploaded_file, header=None, low_memory=False, encoding=enc)
         except Exception:
-            uploaded_file.seek(0)
-            return pd.read_excel(uploaded_file, header=None)
+            continue
+    uploaded_file.seek(0)
+    return pd.read_csv(uploaded_file, header=None, low_memory=False, encoding='utf-8', encoding_errors='ignore')
 
 # 4. ฟังก์ชันสแกนและดึงข้อมูลอัจฉริยะ
 def parse_single_file(uploaded_file):
-    raw_df = read_excel_safe(uploaded_file)
+    raw_df = read_csv_safe(uploaded_file)
 
     data_start_row = 28
     for r in range(min(50, len(raw_df))):
@@ -332,8 +331,8 @@ if st.sidebar.button("🧹 เคลียร์ข้อมูลไฟล์�
     st.rerun()
 
 uploaded_files = st.sidebar.file_uploader(
-    "อัปโหลดไฟล์ Yokogawa (.xlsx, .xls) ได้มากกว่า 1 ไฟล์", 
-    type=["xlsx", "xls"],
+    "อัปโหลดไฟล์ Yokogawa (.csv) ได้มากกว่า 1 ไฟล์", 
+    type=["csv"],
     accept_multiple_files=True
 )
 
@@ -482,4 +481,4 @@ if uploaded_files:
         st.error(f"❌ เกิดข้อผิดพลาดในการประมวลผลไฟล์: {e}")
 
 else:
-    st.info("👈 กรุณาเลือกอัปโหลดไฟล์ (.xlsx หรือ .xls) ที่เมนูด้านซ้าย สามารถเลือกอัปโหลดได้มากกว่า 1 ไฟล์")
+    st.info("👈 กรุณาเลือกอัปโหลดไฟล์ (.csv) ที่เมนูด้านซ้าย สามารถเลือกอัปโหลดได้มากกว่า 1 ไฟล์")
