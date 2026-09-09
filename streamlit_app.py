@@ -3,6 +3,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
 import re
+import io
 
 # 1. ตั้งค่า Page Config
 st.set_page_config(
@@ -174,17 +175,14 @@ def parse_single_file(uploaded_file):
             endheader_cols = [x.strip() for x in line_str.split(",")]
             continue
 
-        # หากเป็นบรรทัดวันที่อย่างเดียว เช่น 17/08/2026
         if date_regex.match(line_str) and "," not in line_str:
             curr_date = line_str
             continue
 
         parts = [p.strip() for p in line_str.split(",")]
         
-        # กรณีคอลัมน์แรกมีทั้งวันที่และเวลา
         if date_regex.search(parts[0]):
             data_rows.append(parts)
-        # กรณีวันที่แยกบรรทัดกับเวลา (คอลัมน์แรกเป็นเวลา เช่น 09:00:14)
         elif time_regex.search(parts[0]):
             dt_str = f"{curr_date} {parts[0]}".strip() if curr_date else parts[0]
             data_rows.append([dt_str] + parts[1:])
@@ -203,7 +201,6 @@ def parse_single_file(uploaded_file):
 
     df = pd.DataFrame()
 
-    # สกัด DateTime จาก Col 0
     col0_str = data_df[0].astype(str).str.strip()
     df["DateTime"] = pd.to_datetime(col0_str, errors="coerce", dayfirst=True)
 
@@ -267,6 +264,17 @@ def process_multiple_files(uploaded_files):
     full_df = pd.concat(combined_dfs, ignore_index=True)
     full_df = full_df.drop_duplicates(subset=["DateTime"]).sort_values("DateTime").reset_index(drop=True)
     return full_df
+
+# ฟังก์ชันแปลง DataFrame เป็น Binary สำหรับดาวน์โหลดเป็นไฟล์ Excel (.xlsx)
+def to_excel_bytes(dataframe):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_export = dataframe.copy()
+        if pd.api.types.is_datetime64_any_dtype(df_export["DateTime"]):
+            df_export["DateTime"] = df_export["DateTime"].dt.strftime('%Y-%m-%d %H:%M:%S')
+        df_export.to_excel(writer, index=False, sheet_name='Furnace Data')
+    output.seek(0)
+    return output.getvalue()
 
 # 4. ฟังก์ชันตกแต่งสไตล์กราฟ
 def apply_industrial_style(fig, y_title, y_range=None, is_dual_axis=False):
@@ -477,30 +485,30 @@ if uploaded_files:
                 apply_industrial_style(fig5, "Cool Water Temp (°C)")
                 st.plotly_chart(fig5, use_container_width=True)
 
-            # ส่วนตรวจสอบและเลือกดาวน์โหลด CSV
-            with st.expander("📋 ตรวจสอบและเลือกดาวน์โหลดตารางข้อมูล CSV"):
+            # ส่วนตรวจสอบและเลือกดาวน์โหลด Excel
+            with st.expander("📊 ตรวจสอบและเลือกดาวน์โหลดตารางข้อมูล Excel (.xlsx)"):
                 st.dataframe(df)
                 
                 st.markdown("---")
-                st.markdown("##### 📥 ตัวเลือกการดาวน์โหลดไฟล์ CSV")
+                st.markdown("##### 📥 ตัวเลือกการดาวน์โหลดไฟล์ Excel")
                 
                 col_opt1, col_opt2 = st.columns([2, 1])
                 with col_opt1:
                     custom_filename = st.text_input(
                         "ตั้งชื่อไฟล์ดาวน์โหลด:", 
-                        value="combined_recorder_nb3_max_data.csv"
+                        value="combined_recorder_nb3_max_data.xlsx"
                     )
-                    if not custom_filename.endswith('.csv'):
-                        custom_filename += '.csv'
+                    if not custom_filename.endswith('.xlsx'):
+                        custom_filename += '.xlsx'
                         
                 with col_opt2:
                     st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                    csv_bytes = df.to_csv(index=False).encode('utf-8-sig', errors='ignore')
+                    excel_bytes = to_excel_bytes(df)
                     st.download_button(
-                        label="📄 ดาวน์โหลดไฟล์ CSV",
-                        data=csv_bytes,
+                        label="📊 ดาวน์โหลดไฟล์ Excel",
+                        data=excel_bytes,
                         file_name=custom_filename,
-                        mime="text/csv",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
                     )
 
