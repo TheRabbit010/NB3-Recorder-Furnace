@@ -246,7 +246,7 @@ def parse_single_file(uploaded_file):
 
     # 5) Cool Water Temp
     c_cool = find_col_by_keyword(r'3\)TH_CH6Max')
-    df["COOL WATER TEMP"] = extract_series(c_cool, 2 + (19) * 3, min_val=-50.0, max_val=200.0)
+    df["COOL WATER TEMP"] = extract_series(c_cool, 2 + (19) * 3, min_val=-100.0, max_val=500.0)
 
     valid_df = df.dropna(subset=["DateTime"]).reset_index(drop=True)
     return valid_df
@@ -473,7 +473,7 @@ if uploaded_files:
                 )
                 st.plotly_chart(fig4, use_container_width=True)
 
-            # 5. Cool Water Temp
+            # 5. Cool Water Temp (Scale: -50 ถึง 150 °C)
             if show_g5:
                 st.subheader("5) COOL WATER TEMP")
                 fig5 = go.Figure()
@@ -484,7 +484,7 @@ if uploaded_files:
                     mode="lines", 
                     line=dict(color="#00ecff", width=2)
                 ))
-                apply_industrial_style(fig5, "Cool Water Temp (°C)")
+                apply_industrial_style(fig5, "Cool Water Temp (°C)", y_range=[-50, 150])
                 st.plotly_chart(fig5, use_container_width=True)
 
             # ส่วนตรวจสอบและเลือกดาวน์โหลด Excel
