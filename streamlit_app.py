@@ -138,48 +138,65 @@ st.markdown("""
 
 st.title("🏭 Recorder NB3 Furnace")
 
-# 3. ฟังก์ชันอ่าน CSV อย่างปลอดภัย
-def read_csv_safe(uploaded_file):
+# 3. ฟังก์ชันสแกนและแกะข้อมูลบรรทัดต่อบรรทัดแบบปลอดภัยสูง (ไม่ใช้ pd.read_csv โดยตรงเพื่อเลี่ยง C Error)
+def parse_single_file(uploaded_file):
+    uploaded_file.seek(0)
+    raw_bytes = uploaded_file.read()
+    
+    # แปลง Byte เป็น Text ด้วย Encoding หลากหลาย
+    text_content = None
     encodings = ['cp932', 'shift_jis', 'utf-8-sig', 'utf-8', 'tis-620', 'latin1']
     for enc in encodings:
         try:
-            uploaded_file.seek(0)
-            return pd.read_csv(uploaded_file, header=None, low_memory=False, encoding=enc)
-        except Exception:
+            text_content = raw_bytes.decode(enc)
+            break
+        except UnicodeDecodeError:
             continue
-    uploaded_file.seek(0)
-    return pd.read_csv(uploaded_file, header=None, low_memory=False, encoding='utf-8', encoding_errors='ignore')
+            
+    if text_content is None:
+        text_content = raw_bytes.decode('utf-8', errors='ignore')
 
-# 4. ฟังก์ชันสแกนหาคอลัมน์ข้อมูล Max ตามโครงสร้างไฟล์ Recorder NB3
-def parse_single_file(uploaded_file):
-    raw_df = read_csv_safe(uploaded_file)
-
-    data_rows = []
+    lines = text_content.splitlines()
+    
     endheader_cols = []
+    data_rows = []
+    
     date_pattern = re.compile(r'^\d{2,4}[-/]\d{1,2}[-/]\d{1,2}')
+    time_pattern = re.compile(r'^\d{1,2}:\d{2}:\d{2}')
 
-    for idx in range(len(raw_df)):
-        first_cell = str(raw_df.iloc[idx, 0]).strip()
-        if first_cell.startswith("#EndHeader"):
-            row_vals = raw_df.iloc[idx].fillna('').astype(str).tolist()
-            if len(row_vals) == 1 and ',' in row_vals[0]:
-                endheader_cols = [x.strip() for x in row_vals[0].split(',')]
-            else:
-                endheader_cols = [x.strip() for x in row_vals]
-                
-        if date_pattern.search(first_cell) or (',' in first_cell and date_pattern.search(first_cell.split(',')[0])):
-            row_cells = raw_df.iloc[idx].dropna().tolist()
-            if len(row_cells) == 1 and ',' in str(row_cells[0]):
-                data_rows.append(str(row_cells[0]).split(','))
-            else:
-                data_rows.append(raw_df.iloc[idx].tolist())
+    curr_date = None
+
+    for line in lines:
+        line_str = line.strip()
+        if not line_str:
+            continue
+
+        # ดึงรายชื่อคอลัมน์จาก #EndHeader
+        if line_str.startswith("#EndHeader"):
+            endheader_cols = [x.strip() for x in line_str.split(",")]
+            continue
+
+        # หากบรรทัดเป็น วันที่ (เช่น 17/08/2026)
+        if date_pattern.match(line_str) and "," not in line_str:
+            curr_date = line_str
+            continue
+
+        # หากบรรทัดขึ้นต้นด้วยเวลา หรือ วันที่+เวลา
+        parts = [p.strip() for p in line_str.split(",")]
+        
+        # กรณีวันที่กับเวลาอยู่อันเดียวกันใน Col 0 (เช่น 17/08/2026 09:00:14,360,...)
+        if date_pattern.search(parts[0]):
+            data_rows.append(parts)
+        # กรณีวันที่แยกบรรทัดกับเวลา (บรรทัดนี้ขึ้นต้นด้วย 09:00:14)
+        elif time_pattern.search(parts[0]) and curr_date:
+            full_dt = f"{curr_date} {parts[0]}"
+            data_rows.append([full_dt] + parts[1:])
 
     if not data_rows:
         return pd.DataFrame()
 
     data_df = pd.DataFrame(data_rows)
 
-    # ค้นหา Index คอลัมน์จากคำค้นรูปแบบ Max
     def find_col_by_keyword(key_pattern):
         if endheader_cols:
             for c_idx, name in enumerate(endheader_cols):
@@ -203,7 +220,7 @@ def parse_single_file(uploaded_file):
         return pd.Series([None] * len(data_df))
 
     # ตำแหน่ง Max ของ Yokogawa Standard:
-    # Col 0: Date, Col 1: ms
+    # Col 0: Date&Time, Col 1: ms
     # แต่ละ Channel มี 3 Sub-channels (Max, Min, Ave) -> คอลัมน์ Max อยู่ที่ 2 + (ch_index * 3)
 
     # 1) Top Zone (1)TH_CH1Max -> 1)TH_CH7Max
@@ -264,7 +281,7 @@ def process_multiple_files(uploaded_files):
     full_df = full_df.drop_duplicates(subset=["DateTime"]).sort_values("DateTime").reset_index(drop=True)
     return full_df
 
-# 5. ฟังก์ชันตกแต่งสไตล์กราฟ
+# 4. ฟังก์ชันตกแต่งสไตล์กราฟ
 def apply_industrial_style(fig, y_title, y_range=None, is_dual_axis=False):
     layout_args = dict(
         template="plotly_dark",
@@ -320,7 +337,7 @@ uploaded_files = st.sidebar.file_uploader(
     accept_multiple_files=True
 )
 
-# 6. ส่วนแสดงผลหลัก
+# 5. ส่วนแสดงผลหลัก
 if uploaded_files:
     try:
         raw_df = process_multiple_files(uploaded_files)
