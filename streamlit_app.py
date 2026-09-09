@@ -138,12 +138,11 @@ st.markdown("""
 
 st.title("🏭 Recorder NB3 Furnace")
 
-# 3. ฟังก์ชันสแกนและแกะข้อมูลบรรทัดต่อบรรทัดแบบปลอดภัยสูง (ไม่ใช้ pd.read_csv โดยตรงเพื่อเลี่ยง C Error)
+# 3. ฟังก์ชันสแกนและแกะข้อมูลบรรทัดต่อบรรทัดแบบยืดหยุ่นสูง
 def parse_single_file(uploaded_file):
     uploaded_file.seek(0)
     raw_bytes = uploaded_file.read()
     
-    # แปลง Byte เป็น Text ด้วย Encoding หลากหลาย
     text_content = None
     encodings = ['cp932', 'shift_jis', 'utf-8-sig', 'utf-8', 'tis-620', 'latin1']
     for enc in encodings:
@@ -161,36 +160,34 @@ def parse_single_file(uploaded_file):
     endheader_cols = []
     data_rows = []
     
-    date_pattern = re.compile(r'^\d{2,4}[-/]\d{1,2}[-/]\d{1,2}')
-    time_pattern = re.compile(r'^\d{1,2}:\d{2}:\d{2}')
+    date_regex = re.compile(r'^\d{1,4}[-/]\d{1,2}[-/]\d{1,4}')
+    time_regex = re.compile(r'^\d{1,2}:\d{2}:\d{2}')
 
-    curr_date = None
+    curr_date = ""
 
     for line in lines:
         line_str = line.strip()
         if not line_str:
             continue
 
-        # ดึงรายชื่อคอลัมน์จาก #EndHeader
         if line_str.startswith("#EndHeader"):
             endheader_cols = [x.strip() for x in line_str.split(",")]
             continue
 
-        # หากบรรทัดเป็น วันที่ (เช่น 17/08/2026)
-        if date_pattern.match(line_str) and "," not in line_str:
+        # หากเป็นบรรทัดวันที่อย่างเดียว เช่น 17/08/2026
+        if date_regex.match(line_str) and "," not in line_str:
             curr_date = line_str
             continue
 
-        # หากบรรทัดขึ้นต้นด้วยเวลา หรือ วันที่+เวลา
         parts = [p.strip() for p in line_str.split(",")]
         
-        # กรณีวันที่กับเวลาอยู่อันเดียวกันใน Col 0 (เช่น 17/08/2026 09:00:14,360,...)
-        if date_pattern.search(parts[0]):
+        # กรณีคอลัมน์แรกมีทั้งวันที่และเวลา
+        if date_regex.search(parts[0]):
             data_rows.append(parts)
-        # กรณีวันที่แยกบรรทัดกับเวลา (บรรทัดนี้ขึ้นต้นด้วย 09:00:14)
-        elif time_pattern.search(parts[0]) and curr_date:
-            full_dt = f"{curr_date} {parts[0]}"
-            data_rows.append([full_dt] + parts[1:])
+        # กรณีวันที่แยกบรรทัดกับเวลา (คอลัมน์แรกเป็นเวลา เช่น 09:00:14)
+        elif time_regex.search(parts[0]):
+            dt_str = f"{curr_date} {parts[0]}".strip() if curr_date else parts[0]
+            data_rows.append([dt_str] + parts[1:])
 
     if not data_rows:
         return pd.DataFrame()
@@ -206,10 +203,9 @@ def parse_single_file(uploaded_file):
 
     df = pd.DataFrame()
 
-    # 1. DateTime (สกัดจากคอลัมน์แรก)
+    # สกัด DateTime จาก Col 0
     col0_str = data_df[0].astype(str).str.strip()
-    dt_clean = col0_str.str.extract(r'(\d{2,4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})')[0]
-    df["DateTime"] = pd.to_datetime(dt_clean, errors="coerce")
+    df["DateTime"] = pd.to_datetime(col0_str, errors="coerce", dayfirst=True)
 
     def extract_series(col_idx, fallback_idx, min_val=-100.0, max_val=10000.0):
         target_idx = col_idx if col_idx is not None else fallback_idx
@@ -218,10 +214,6 @@ def parse_single_file(uploaded_file):
             s = s.apply(lambda x: x if (pd.notna(x) and min_val <= x <= max_val) else None)
             return s
         return pd.Series([None] * len(data_df))
-
-    # ตำแหน่ง Max ของ Yokogawa Standard:
-    # Col 0: Date&Time, Col 1: ms
-    # แต่ละ Channel มี 3 Sub-channels (Max, Min, Ave) -> คอลัมน์ Max อยู่ที่ 2 + (ch_index * 3)
 
     # 1) Top Zone (1)TH_CH1Max -> 1)TH_CH7Max
     for i in range(1, 8):
@@ -243,24 +235,19 @@ def parse_single_file(uploaded_file):
         df[f"3)TH_CH{i} ({dryoff_names[i-1]})"] = extract_series(c, fb, min_val=0.0, max_val=1000.0)
 
     # 4) Oxygen & N2 Flow (ใช้ค่า Max)
-    # 3)TH_CH4Max: Oxygen EXIT
     c_o2_exit = find_col_by_keyword(r'3\)TH_CH4Max')
     df["3)TH_CH4 (ppm Oxygen EXIT)"] = extract_series(c_o2_exit, 2 + (17) * 3, min_val=0.0, max_val=2000.0)
 
-    # 3)TH_CH5Max: Oxygen ENTRANCE
     c_o2_ent = find_col_by_keyword(r'3\)TH_CH5Max')
     df["3)TH_CH5 (ppm Oxygen ENTRANCE)"] = extract_series(c_o2_ent, 2 + (18) * 3, min_val=0.0, max_val=2000.0)
 
-    # 3)TH_CH7Max: N2 Exit
     c_n2_exit = find_col_by_keyword(r'3\)TH_CH7Max')
     df["3)TH_CH7 (N2 Exit)"] = extract_series(c_n2_exit, 2 + (20) * 3, min_val=0.0, max_val=20000.0)
 
-    # 3)TH_CH8Max: N2 Entrance
     c_n2_ent = find_col_by_keyword(r'3\)TH_CH8Max')
     df["3)TH_CH8 (N2 Entrance)"] = extract_series(c_n2_ent, 2 + (21) * 3, min_val=0.0, max_val=20000.0)
 
     # 5) Cool Water Temp (ใช้ค่า Max)
-    # 3)TH_CH6Max: COOL WATER TEMP
     c_cool = find_col_by_keyword(r'3\)TH_CH6Max')
     df["3)TH_CH6 (COOL WATER TEMP)"] = extract_series(c_cool, 2 + (19) * 3, min_val=-50.0, max_val=200.0)
 
@@ -424,7 +411,6 @@ if uploaded_files:
                 st.subheader("4) Oxygen EXIT/ENTRANCE & N2 Flow (Max) (3)TH_CH4, CH5, CH7, CH8)")
                 fig4 = make_subplots(specs=[[{"secondary_y": True}]])
                 
-                # แกน Y ซ้าย: ppm Oxygen (Scale 0-200 ppm)
                 fig4.add_trace(go.Scatter(
                     x=df["DateTime"], 
                     y=df["3)TH_CH4 (ppm Oxygen EXIT)"], 
@@ -441,7 +427,6 @@ if uploaded_files:
                     line=dict(color="#A52A2A", width=2)
                 ), secondary_y=False)
 
-                # แกน Y ขวา: N2 Flow (Free Scale)
                 fig4.add_trace(go.Scatter(
                     x=df["DateTime"], 
                     y=df["3)TH_CH7 (N2 Exit)"], 
