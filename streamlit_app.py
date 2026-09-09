@@ -12,10 +12,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. ปรับแต่ง CSS ให้เป็น Dark Mode, ซ่อนแถบขาวด้านบน และตั้งค่าสีข้อความให้ชัดเจน
+# 2. ปรับแต่ง CSS สำหรับ Dark Mode
 st.markdown("""
     <style>
-        /* ซ่อนแถบขาว Header ด้านบน */
         header[data-testid="stHeader"] {
             background-color: transparent !important;
             display: none !important;
@@ -23,8 +22,6 @@ st.markdown("""
         [data-testid="stToolbar"] {
             display: none !important;
         }
-        
-        /* ตั้งค่าพื้นหลัง Dark Mode */
         html, body, .stApp, [data-testid="stAppViewContainer"] {
             background-color: #0e1117 !important;
             color: #ffffff !important;
@@ -35,8 +32,6 @@ st.markdown("""
         .stMarkdown, h1, h2, h3, p, span, label {
             color: #ffffff !important;
         }
-
-        /* ปุ่มเคลียร์ข้อมูลใน Sidebar */
         [data-testid="stSidebar"] div.stButton > button {
             background-color: #21262d !important;
             color: #ffffff !important;
@@ -49,8 +44,6 @@ st.markdown("""
             background-color: #F0B90B !important;
             color: #000000 !important;
         }
-
-        /* กล่อง File Uploader */
         [data-testid="stFileUploader"] {
             background-color: #161b22 !important;
             border: 1.5px solid #F0B90B !important;
@@ -67,8 +60,6 @@ st.markdown("""
         [data-testid="stFileUploader"] section small {
             color: #e6edf3 !important;
         }
-
-        /* การ์ดไฟล์ที่อัปโหลดแล้ว */
         [data-testid="stFileUploaderFileData"],
         [data-testid="stFileUploaderFileData"] > div,
         [data-testid="stFileUploaderFile"] {
@@ -81,8 +72,6 @@ st.markdown("""
             color: #ffffff !important;
             font-weight: bold !important;
         }
-
-        /* ปรับแถบ Expander */
         [data-testid="stExpander"] {
             background-color: #161b22 !important;
             border: 1px solid #30363d !important;
@@ -96,8 +85,6 @@ st.markdown("""
         [data-testid="stExpander"] details summary * {
             color: #ffffff !important;
         }
-
-        /* ปรับแต่งตาราง Dataframe */
         [data-testid="stDataFrame"] {
             background-color: #161b22 !important;
             border: 1px solid #30363d !important;
@@ -111,8 +98,6 @@ st.markdown("""
             background-color: #21262d !important;
             color: #ffffff !important;
         }
-
-        /* ปรับแต่งกล่องพิมพ์ข้อความ (Text Input) */
         div[data-baseweb="input"] {
             background-color: #21262d !important;
             border: 1px solid #30363d !important;
@@ -123,8 +108,6 @@ st.markdown("""
             background-color: #21262d !important;
             color: #ffffff !important;
         }
-
-        /* ปรับแต่งปุ่มดาวน์โหลด CSV */
         div.stDownloadButton > button {
             background-color: #21262d !important;
             border: 1.5px solid #F0B90B !important;
@@ -153,10 +136,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# แสดงชื่อโปรแกรมหลัก
 st.title("🏭 Recorder NB3 Furnace")
 
-# 3. ฟังก์ชันอ่านไฟล์ CSV อย่างปลอดภัย
+# 3. ฟังก์ชันอ่าน CSV อย่างปลอดภัย
 def read_csv_safe(uploaded_file):
     encodings = ['cp932', 'shift_jis', 'utf-8-sig', 'utf-8', 'tis-620', 'latin1']
     for enc in encodings:
@@ -168,117 +150,119 @@ def read_csv_safe(uploaded_file):
     uploaded_file.seek(0)
     return pd.read_csv(uploaded_file, header=None, low_memory=False, encoding='utf-8', encoding_errors='ignore')
 
-# 4. ฟังก์ชันสแกนและดึงข้อมูลอัจฉริยะ
+# 4. ฟังก์ชันสแกนหาคอลัมน์ข้อมูล Max ตามโครงสร้างไฟล์ Recorder NB3
 def parse_single_file(uploaded_file):
     raw_df = read_csv_safe(uploaded_file)
 
-    data_start_row = 28
-    for r in range(min(50, len(raw_df))):
-        val_str = str(raw_df.iloc[r, 0])
-        if re.search(r'\d{2,4}[-/]\d{1,2}[-/]\d{1,2}', val_str):
-            data_start_row = r
-            break
+    data_rows = []
+    endheader_cols = []
+    date_pattern = re.compile(r'^\d{2,4}[-/]\d{1,2}[-/]\d{1,2}')
 
-    header_df = raw_df.iloc[:data_start_row].copy()
-    data_df = raw_df.iloc[data_start_row:].copy().reset_index(drop=True)
-
-    def scan_channel_col(ch_num, custom_keywords=None):
-        patterns = [re.compile(rf'\bCH0*{ch_num}\b', re.IGNORECASE)]
-        if custom_keywords:
-            for kw in custom_keywords:
-                patterns.append(re.compile(re.escape(kw), re.IGNORECASE))
-
-        matched_cols = []
-        for col in range(2, header_df.shape[1]):
-            col_cells = header_df[col].fillna('').astype(str).tolist()
-            col_text = " ".join([str(cell) for cell in col_cells])
-            
-            if any(p.search(col_text) for p in patterns):
-                matched_cols.append(col)
-        
-        if not matched_cols:
-            return None
-        
-        if len(matched_cols) == 1:
-            return matched_cols[0]
-            
-        for col in matched_cols:
-            col_cells = header_df[col].fillna('').astype(str).tolist()
-            col_text = " ".join([str(cell) for cell in col_cells]).upper()
-            if "MAX" in col_text:
-                return col
+    for idx in range(len(raw_df)):
+        first_cell = str(raw_df.iloc[idx, 0]).strip()
+        if first_cell.startswith("#EndHeader"):
+            row_vals = raw_df.iloc[idx].fillna('').astype(str).tolist()
+            if len(row_vals) == 1 and ',' in row_vals[0]:
+                endheader_cols = [x.strip() for x in row_vals[0].split(',')]
+            else:
+                endheader_cols = [x.strip() for x in row_vals]
                 
-        return matched_cols[-1]
+        if date_pattern.search(first_cell) or (',' in first_cell and date_pattern.search(first_cell.split(',')[0])):
+            row_cells = raw_df.iloc[idx].dropna().tolist()
+            if len(row_cells) == 1 and ',' in str(row_cells[0]):
+                data_rows.append(str(row_cells[0]).split(','))
+            else:
+                data_rows.append(raw_df.iloc[idx].tolist())
+
+    if not data_rows:
+        return pd.DataFrame()
+
+    data_df = pd.DataFrame(data_rows)
+
+    # ค้นหา Index คอลัมน์จากคำค้นรูปแบบ Max
+    def find_col_by_keyword(key_pattern):
+        if endheader_cols:
+            for c_idx, name in enumerate(endheader_cols):
+                if re.search(key_pattern, name, re.IGNORECASE):
+                    return c_idx
+        return None
 
     df = pd.DataFrame()
-    col0_str = data_df[0].astype(str)
-    col1_str = data_df[1].astype(str) if data_df.shape[1] > 1 else ""
-    df["DateTime"] = pd.to_datetime(col0_str + " " + col1_str, errors="coerce")
 
-    def extract_series(col_idx, min_val=-150.0, max_val=15000.0):
-        if col_idx is not None and col_idx < data_df.shape[1]:
-            s = pd.to_numeric(data_df[col_idx], errors="coerce")
+    # 1. DateTime (สกัดจากคอลัมน์แรก)
+    col0_str = data_df[0].astype(str).str.strip()
+    dt_clean = col0_str.str.extract(r'(\d{2,4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})')[0]
+    df["DateTime"] = pd.to_datetime(dt_clean, errors="coerce")
+
+    def extract_series(col_idx, fallback_idx, min_val=-100.0, max_val=10000.0):
+        target_idx = col_idx if col_idx is not None else fallback_idx
+        if target_idx is not None and target_idx < data_df.shape[1]:
+            s = pd.to_numeric(data_df[target_idx], errors="coerce")
             s = s.apply(lambda x: x if (pd.notna(x) and min_val <= x <= max_val) else None)
             return s
         return pd.Series([None] * len(data_df))
 
-    mapping_info = {}
+    # ตำแหน่ง Max ของ Yokogawa Standard:
+    # Col 0: Date, Col 1: ms
+    # แต่ละ Channel มี 3 Sub-channels (Max, Min, Ave) -> คอลัมน์ Max อยู่ที่ 2 + (ch_index * 3)
 
-    # CH001 - CH007: Top Zone #1 - #7
+    # 1) Top Zone (1)TH_CH1Max -> 1)TH_CH7Max
     for i in range(1, 8):
-        c = scan_channel_col(i)
-        df[f"Top Zone #{i}"] = extract_series(c, min_val=0.0, max_val=1500.0)
-        mapping_info[f"Top Zone #{i}"] = f"Col {c}" if c is not None else "Not Found"
+        c = find_col_by_keyword(rf'1\)TH_CH{i}Max')
+        fb = 2 + (i - 1) * 3
+        df[f"1)TH_CH{i} Top"] = extract_series(c, fb, min_val=0.0, max_val=1200.0)
 
-    # CH008 - CH014: Bottom Zone #1 - #7
+    # 2) Bottom Zone 2)TH_CH1Max -> 2)TH_CH7Max
     for i in range(1, 8):
-        ch_num = 7 + i
-        c = scan_channel_col(ch_num)
-        df[f"Bottom Zone #{i}"] = extract_series(c, min_val=0.0, max_val=1500.0)
-        mapping_info[f"Bottom Zone #{i}"] = f"Col {c}" if c is not None else "Not Found"
+        c = find_col_by_keyword(rf'2\)TH_CH{i}Max')
+        fb = 2 + (7 + i - 1) * 3
+        df[f"2)TH_CH{i} Bottom"] = extract_series(c, fb, min_val=0.0, max_val=1200.0)
 
-    # CH015: EXIT O2
-    c15 = scan_channel_col(15)
-    df["EXIT O2"] = extract_series(c15, min_val=0.0, max_val=2000.0)
-    mapping_info["EXIT O2 (CH15)"] = f"Col {c15}" if c15 is not None else "Not Found"
+    # 3) DRYOFF1-3 (3)TH_CH1Max -> 3)TH_CH3Max
+    dryoff_names = ["DRYOFF1", "DRYOFF2", "DRYOFF3"]
+    for i in range(1, 4):
+        c = find_col_by_keyword(rf'3\)TH_CH{i}Max')
+        fb = 2 + (14 + i - 1) * 3
+        df[f"3)TH_CH{i} ({dryoff_names[i-1]})"] = extract_series(c, fb, min_val=0.0, max_val=1000.0)
 
-    # CH016 & CH017: Dryer #1 & Dryer #2
-    c16 = scan_channel_col(16)
-    c17 = scan_channel_col(17)
-    df["Dryer #1"] = extract_series(c16, min_val=0.0, max_val=1000.0)
-    df["Dryer #2"] = extract_series(c17, min_val=0.0, max_val=1000.0)
-    mapping_info["Dryer #1 (CH16)"] = f"Col {c16}" if c16 is not None else "Not Found"
-    mapping_info["Dryer #2 (CH17)"] = f"Col {c17}" if c17 is not None else "Not Found"
+    # 4) Oxygen & N2 Flow (ใช้ค่า Max)
+    # 3)TH_CH4Max: Oxygen EXIT
+    c_o2_exit = find_col_by_keyword(r'3\)TH_CH4Max')
+    df["3)TH_CH4 (ppm Oxygen EXIT)"] = extract_series(c_o2_exit, 2 + (17) * 3, min_val=0.0, max_val=2000.0)
 
-    # CH018: N2 Flow
-    c18 = scan_channel_col(18, custom_keywords=["N2 .1", "N2.1", "N2 Flow", "N2"])
-    df["N2 Flow"] = extract_series(c18, min_val=0.0, max_val=20000.0)
-    mapping_info["N2 Flow (CH18/N2.1)"] = f"Col {c18}" if c18 is not None else "Not Found"
+    # 3)TH_CH5Max: Oxygen ENTRANCE
+    c_o2_ent = find_col_by_keyword(r'3\)TH_CH5Max')
+    df["3)TH_CH5 (ppm Oxygen ENTRANCE)"] = extract_series(c_o2_ent, 2 + (18) * 3, min_val=0.0, max_val=2000.0)
 
-    # CH019: ENTRANCE O2
-    c19 = scan_channel_col(19)
-    df["ENTRANCE O2"] = extract_series(c19, min_val=0.0, max_val=2000.0)
-    mapping_info["ENTRANCE O2 (CH19)"] = f"Col {c19}" if c19 is not None else "Not Found"
+    # 3)TH_CH7Max: N2 Exit
+    c_n2_exit = find_col_by_keyword(r'3\)TH_CH7Max')
+    df["3)TH_CH7 (N2 Exit)"] = extract_series(c_n2_exit, 2 + (20) * 3, min_val=0.0, max_val=20000.0)
 
-    # CH020: DEW POINT
-    c20 = scan_channel_col(20, custom_keywords=["DEW POINT", "DEW", "DP"])
-    df["DEW POINT"] = extract_series(c20, min_val=-150.0, max_val=100.0)
-    mapping_info["DEW POINT (CH20)"] = f"Col {c20}" if c20 is not None else "Not Found"
+    # 3)TH_CH8Max: N2 Entrance
+    c_n2_ent = find_col_by_keyword(r'3\)TH_CH8Max')
+    df["3)TH_CH8 (N2 Entrance)"] = extract_series(c_n2_ent, 2 + (21) * 3, min_val=0.0, max_val=20000.0)
 
-    return df.dropna(subset=["DateTime"]), mapping_info
+    # 5) Cool Water Temp (ใช้ค่า Max)
+    # 3)TH_CH6Max: COOL WATER TEMP
+    c_cool = find_col_by_keyword(r'3\)TH_CH6Max')
+    df["3)TH_CH6 (COOL WATER TEMP)"] = extract_series(c_cool, 2 + (19) * 3, min_val=-50.0, max_val=200.0)
 
-# ฟังก์ชันประมวลผลหลายไฟล์
+    valid_df = df.dropna(subset=["DateTime"]).reset_index(drop=True)
+    return valid_df
+
 def process_multiple_files(uploaded_files):
     combined_dfs = []
-    logs = {}
     for file in uploaded_files:
-        single_df, mapping = parse_single_file(file)
-        combined_dfs.append(single_df)
-        logs[file.name] = mapping
+        single_df = parse_single_file(file)
+        if not single_df.empty:
+            combined_dfs.append(single_df)
     
+    if not combined_dfs:
+        return pd.DataFrame()
+
     full_df = pd.concat(combined_dfs, ignore_index=True)
     full_df = full_df.drop_duplicates(subset=["DateTime"]).sort_values("DateTime").reset_index(drop=True)
-    return full_df, logs
+    return full_df
 
 # 5. ฟังก์ชันตกแต่งสไตล์กราฟ
 def apply_industrial_style(fig, y_title, y_range=None, is_dual_axis=False):
@@ -300,7 +284,7 @@ def apply_industrial_style(fig, y_title, y_range=None, is_dual_axis=False):
             x=1.02
         ),
         xaxis=dict(
-            title=dict(text="Absolute Time [Date & Time]", font=dict(color="#FFFFFF", size=12)),
+            title=dict(text="Date & Time", font=dict(color="#FFFFFF", size=12)),
             tickfont=dict(color="#CCCCCC", size=10),
             showgrid=True,
             gridcolor="rgba(255,255,255,0.08)",
@@ -331,7 +315,7 @@ if st.sidebar.button("🧹 เคลียร์ข้อมูลไฟล์�
     st.rerun()
 
 uploaded_files = st.sidebar.file_uploader(
-    "อัปโหลดไฟล์ Yokogawa (.csv) ได้มากกว่า 1 ไฟล์", 
+    "อัปโหลดไฟล์ Recorder NB3 (.csv) ได้มากกว่า 1 ไฟล์", 
     type=["csv"],
     accept_multiple_files=True
 )
@@ -339,143 +323,184 @@ uploaded_files = st.sidebar.file_uploader(
 # 6. ส่วนแสดงผลหลัก
 if uploaded_files:
     try:
-        raw_df, channel_logs = process_multiple_files(uploaded_files)
-        st.sidebar.success(f"รวมข้อมูลสำเร็จ {len(uploaded_files)} ไฟล์ ({len(raw_df)} แถว)")
-
-        st.sidebar.markdown("---")
-        st.sidebar.header("🎛️ Dynamic Controls")
+        raw_df = process_multiple_files(uploaded_files)
         
-        min_time = raw_df["DateTime"].min().to_pydatetime()
-        max_time = raw_df["DateTime"].max().to_pydatetime()
-        
-        selected_time = st.sidebar.slider(
-            "⏱️ ช่วงเวลา:",
-            min_value=min_time,
-            max_value=max_time,
-            value=(min_time, max_time),
-            format="MM-DD HH:mm"
-        )
-        
-        df = raw_df[(raw_df["DateTime"] >= selected_time[0]) & (raw_df["DateTime"] <= selected_time[1])].copy()
+        if raw_df.empty:
+            st.error("⚠️ ไม่พบข้อมูลวันเวลา (DateTime) ที่ถูกต้องในไฟล์ที่อัปโหลด กรุณาตรวจสอบรูปแบบไฟล์ CSV")
+        else:
+            st.sidebar.success(f"รวมข้อมูลสำเร็จ {len(uploaded_files)} ไฟล์ ({len(raw_df)} แถว)")
 
-        st.sidebar.subheader("📊 เลือกกลุ่มกราฟ")
-        show_g1 = st.sidebar.checkbox("1. Top Zone Temp (CH1-7)", value=True)
-        show_g2 = st.sidebar.checkbox("2. Bottom Zone Temp (CH8-14)", value=True)
-        show_g3 = st.sidebar.checkbox("3. Dryer Temp (CH16-17)", value=True)
-        show_g4 = st.sidebar.checkbox("4. O2 & N2 Flow (CH15, CH18, CH19)", value=True)
-        show_g5 = st.sidebar.checkbox("5. Dew Point (CH20)", value=True)
-
-        # 1. Top Zone Temp (Scale: 550 - 650 °C)
-        if show_g1:
-            st.subheader("1. Brazing zone Top #1-#7 (CH001-CH007)")
-            fig1 = go.Figure()
-            top_colors = ["#FF0000", "#008000", "#0000FF", "#8A2BE2", "#A52A2A", "#FFA500", "#9ACD32"]
-            for i in range(1, 8):
-                fig1.add_trace(go.Scatter(
-                    x=df["DateTime"], 
-                    y=df[f"Top Zone #{i}"], 
-                    name=f"Top Z#{i} (CH{i:03d})", 
-                    mode="lines", 
-                    line=dict(color=top_colors[i-1], width=2)
-                ))
-            apply_industrial_style(fig1, "Temperature (°C)", y_range=[550, 650])
-            st.plotly_chart(fig1, use_container_width=True)
-
-        # 2. Bottom Zone Temp (Scale: 550 - 650 °C)
-        if show_g2:
-            st.subheader("2. Brazing zone Bottom #1-#7 (CH008-CH014)")
-            fig2 = go.Figure()
-            bottom_colors = ["#E0FFFF", "#FF1493", "#808080", "#00FF00", "#008000", "#0000FF", "#8A2BE2"]
-            for i in range(1, 8):
-                ch_num = 7 + i
-                fig2.add_trace(go.Scatter(
-                    x=df["DateTime"], 
-                    y=df[f"Bottom Zone #{i}"], 
-                    name=f"Bottom Z#{i} (CH{ch_num:03d})", 
-                    mode="lines", 
-                    line=dict(color=bottom_colors[i-1], width=2)
-                ))
-            apply_industrial_style(fig2, "Temperature (°C)", y_range=[550, 650])
-            st.plotly_chart(fig2, use_container_width=True)
-
-        # 3. Dryer Temp (Scale: 150 - 350 °C)
-        if show_g3:
-            st.subheader("3. Dryer #1 & #2 (CH016 & CH017)")
-            fig3 = go.Figure()
-            fig3.add_trace(go.Scatter(x=df["DateTime"], y=df["Dryer #1"], name="Dryer #1 (CH016)", mode="lines", line=dict(color="#FFA500", width=2)))
-            fig3.add_trace(go.Scatter(x=df["DateTime"], y=df["Dryer #2"], name="Dryer #2 (CH017)", mode="lines", line=dict(color="#9ACD32", width=2)))
-            apply_industrial_style(fig3, "Temperature (°C)", y_range=[150, 350])
-            st.plotly_chart(fig3, use_container_width=True)
-
-        # 4. O2 & N2 Flow Rate
-        if show_g4:
-            st.subheader("4. ppmO2 Entry/Exit & N2 Flow (CH015, CH018, CH019)")
-            fig4 = make_subplots(specs=[[{"secondary_y": True}]])
+            st.sidebar.markdown("---")
+            st.sidebar.header("🎛️ Dynamic Controls")
             
-            fig4.add_trace(go.Scatter(x=df["DateTime"], y=df["ENTRANCE O2"], name="ENTRANCE O2 (CH019)", mode="lines", line=dict(color="#FF80FF", width=2)), secondary_y=False)
-            fig4.add_trace(go.Scatter(x=df["DateTime"], y=df["EXIT O2"], name="EXIT O2 (CH015)", mode="lines", line=dict(color="#A52A2A", width=2)), secondary_y=False)
-            fig4.add_trace(go.Scatter(x=df["DateTime"], y=df["N2 Flow"], name="N2 Flow (CH018/N2.1)", mode="lines", line=dict(color="#ADD8E6", width=2)), secondary_y=True)
+            min_time = raw_df["DateTime"].min().to_pydatetime()
+            max_time = raw_df["DateTime"].max().to_pydatetime()
             
-            apply_industrial_style(fig4, "Oxygen Level (ppm)", is_dual_axis=True)
-            fig4.update_layout(
-                yaxis=dict(
-                    title=dict(text="Oxygen Level (ppm) [0-200]", font=dict(color="#FFFFFF", size=12)),
-                    range=[0, 200],
-                    showgrid=True,
-                    gridcolor="rgba(255,255,255,0.08)"
-                ),
-                yaxis2=dict(
-                    title=dict(text="N2 Flow Rate (Free Scale)", font=dict(color="#ADD8E6", size=12)),
-                    tickfont=dict(color="#ADD8E6", size=10),
-                    showgrid=False,
-                    overlaying="y",
-                    side="right",
-                    linecolor="#ADD8E6",
-                    autorange=True
-                )
+            selected_time = st.sidebar.slider(
+                "⏱️ ช่วงเวลา:",
+                min_value=min_time,
+                max_value=max_time,
+                value=(min_time, max_time),
+                format="MM-DD HH:mm"
             )
-            st.plotly_chart(fig4, use_container_width=True)
-
-        # 5. Dew Point (Scale: -100 ถึง 10 °Cdp)
-        if show_g5:
-            st.subheader("5. Dew point 'Cdp (CH020)")
-            fig5 = go.Figure()
-            fig5.add_trace(go.Scatter(
-                x=df["DateTime"], 
-                y=df["DEW POINT"], 
-                name="Dew Point (CH020)", 
-                mode="lines", 
-                line=dict(color="#00ecff", width=2)
-            ))
-            apply_industrial_style(fig5, "Dew Point (°Cdp)", y_range=[-100, 10])
-            st.plotly_chart(fig5, use_container_width=True)
-
-        # ส่วนตรวจสอบและเลือกดาวน์โหลด CSV
-        with st.expander("📋 ตรวจสอบและเลือกดาวน์โหลดตารางข้อมูล CSV"):
-            st.dataframe(df)
             
-            st.markdown("---")
-            st.markdown("##### 📥 ตัวเลือกการดาวน์โหลดไฟล์ CSV")
-            
-            col_opt1, col_opt2 = st.columns([2, 1])
-            with col_opt1:
-                custom_filename = st.text_input(
-                    "ตั้งชื่อไฟล์ดาวน์โหลด:", 
-                    value="combined_furnace_data.csv"
+            df = raw_df[(raw_df["DateTime"] >= selected_time[0]) & (raw_df["DateTime"] <= selected_time[1])].copy()
+
+            st.sidebar.subheader("📊 เลือกกลุ่มกราฟ")
+            show_g1 = st.sidebar.checkbox("1. Top Zone Temp (1)TH_CH1-CH7 [Max]", value=True)
+            show_g2 = st.sidebar.checkbox("2. Bottom Zone Temp (2)TH_CH1-CH7 [Max]", value=True)
+            show_g3 = st.sidebar.checkbox("3. DRYOFF Temp (3)TH_CH1-CH3 [Max]", value=True)
+            show_g4 = st.sidebar.checkbox("4. ppm Oxygen & N2 Flow (3)TH_CH4,5,7,8 [Max]", value=True)
+            show_g5 = st.sidebar.checkbox("5. Cool Water Temp (3)TH_CH6 [Max]", value=True)
+
+            # 1. Top Zone Temp (CH1 - CH7)
+            if show_g1:
+                st.subheader("1) Top Zone Temperature (Max): 1)TH_CH1 to 1)TH_CH7")
+                fig1 = go.Figure()
+                top_colors = ["#FF0000", "#008000", "#0000FF", "#8A2BE2", "#A52A2A", "#FFA500", "#9ACD32"]
+                for i in range(1, 8):
+                    fig1.add_trace(go.Scatter(
+                        x=df["DateTime"], 
+                        y=df[f"1)TH_CH{i} Top"], 
+                        name=f"1)TH_CH{i} Top", 
+                        mode="lines", 
+                        line=dict(color=top_colors[i-1], width=2)
+                    ))
+                apply_industrial_style(fig1, "Temperature (°C)")
+                st.plotly_chart(fig1, use_container_width=True)
+
+            # 2. Bottom Zone Temp (CH1 - CH7)
+            if show_g2:
+                st.subheader("2) Bottom Zone Temperature (Max): 2)TH_CH1 to 2)TH_CH7")
+                fig2 = go.Figure()
+                bottom_colors = ["#E0FFFF", "#FF1493", "#808080", "#00FF00", "#008000", "#0000FF", "#8A2BE2"]
+                for i in range(1, 8):
+                    fig2.add_trace(go.Scatter(
+                        x=df["DateTime"], 
+                        y=df[f"2)TH_CH{i} Bottom"], 
+                        name=f"2)TH_CH{i} Bottom", 
+                        mode="lines", 
+                        line=dict(color=bottom_colors[i-1], width=2)
+                    ))
+                apply_industrial_style(fig2, "Temperature (°C)")
+                st.plotly_chart(fig2, use_container_width=True)
+
+            # 3. DRYOFF1-3 (3)TH_CH1 to 3)TH_CH3
+            if show_g3:
+                st.subheader("3) DRYOFF Temperature (Max): 3)TH_CH1 to 3)TH_CH3 (DRYOFF1-3)")
+                fig3 = go.Figure()
+                dry_colors = ["#FFA500", "#9ACD32", "#00ECFF"]
+                dryoff_names = ["DRYOFF1", "DRYOFF2", "DRYOFF3"]
+                for i in range(1, 4):
+                    fig3.add_trace(go.Scatter(
+                        x=df["DateTime"], 
+                        y=df[f"3)TH_CH{i} ({dryoff_names[i-1]})"], 
+                        name=f"3)TH_CH{i} ({dryoff_names[i-1]})", 
+                        mode="lines", 
+                        line=dict(color=dry_colors[i-1], width=2)
+                    ))
+                apply_industrial_style(fig3, "Temperature (°C)")
+                st.plotly_chart(fig3, use_container_width=True)
+
+            # 4. ppm Oxygen & N2 Flow Rate (Dual Axis)
+            if show_g4:
+                st.subheader("4) Oxygen EXIT/ENTRANCE & N2 Flow (Max) (3)TH_CH4, CH5, CH7, CH8)")
+                fig4 = make_subplots(specs=[[{"secondary_y": True}]])
+                
+                # แกน Y ซ้าย: ppm Oxygen (Scale 0-200 ppm)
+                fig4.add_trace(go.Scatter(
+                    x=df["DateTime"], 
+                    y=df["3)TH_CH4 (ppm Oxygen EXIT)"], 
+                    name="3)TH_CH4 (Oxygen EXIT)", 
+                    mode="lines", 
+                    line=dict(color="#FF80FF", width=2)
+                ), secondary_y=False)
+                
+                fig4.add_trace(go.Scatter(
+                    x=df["DateTime"], 
+                    y=df["3)TH_CH5 (ppm Oxygen ENTRANCE)"], 
+                    name="3)TH_CH5 (Oxygen ENTRANCE)", 
+                    mode="lines", 
+                    line=dict(color="#A52A2A", width=2)
+                ), secondary_y=False)
+
+                # แกน Y ขวา: N2 Flow (Free Scale)
+                fig4.add_trace(go.Scatter(
+                    x=df["DateTime"], 
+                    y=df["3)TH_CH7 (N2 Exit)"], 
+                    name="3)TH_CH7 (N2 Exit)", 
+                    mode="lines", 
+                    line=dict(color="#ADD8E6", width=2, dash="dash")
+                ), secondary_y=True)
+
+                fig4.add_trace(go.Scatter(
+                    x=df["DateTime"], 
+                    y=df["3)TH_CH8 (N2 Entrance)"], 
+                    name="3)TH_CH8 (N2 Entrance)", 
+                    mode="lines", 
+                    line=dict(color="#00FF00", width=2, dash="dash")
+                ), secondary_y=True)
+
+                apply_industrial_style(fig4, "Oxygen Level (ppm)", is_dual_axis=True)
+                fig4.update_layout(
+                    yaxis=dict(
+                        title=dict(text="Oxygen Level (ppm) [0-200]", font=dict(color="#FFFFFF", size=12)),
+                        range=[0, 200],
+                        showgrid=True,
+                        gridcolor="rgba(255,255,255,0.08)"
+                    ),
+                    yaxis2=dict(
+                        title=dict(text="N2 Flow Rate (Free Scale)", font=dict(color="#ADD8E6", size=12)),
+                        tickfont=dict(color="#ADD8E6", size=10),
+                        showgrid=False,
+                        overlaying="y",
+                        side="right",
+                        linecolor="#ADD8E6",
+                        autorange=True
+                    )
                 )
-                if not custom_filename.endswith('.csv'):
-                    custom_filename += '.csv'
-                    
-            with col_opt2:
-                st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                csv_bytes = df.to_csv(index=False).encode('utf-8-sig', errors='ignore')
-                st.download_button(
-                    label="📄 ดาวน์โหลดไฟล์ CSV",
-                    data=csv_bytes,
-                    file_name=custom_filename,
-                    mime="text/csv",
-                    use_container_width=True
-                )
+                st.plotly_chart(fig4, use_container_width=True)
+
+            # 5. Cool Water Temp (3)TH_CH6
+            if show_g5:
+                st.subheader("5) COOL WATER TEMP (Max): 3)TH_CH6")
+                fig5 = go.Figure()
+                fig5.add_trace(go.Scatter(
+                    x=df["DateTime"], 
+                    y=df["3)TH_CH6 (COOL WATER TEMP)"], 
+                    name="3)TH_CH6 (COOL WATER TEMP)", 
+                    mode="lines", 
+                    line=dict(color="#00ecff", width=2)
+                ))
+                apply_industrial_style(fig5, "Cool Water Temp (°C)")
+                st.plotly_chart(fig5, use_container_width=True)
+
+            # ส่วนตรวจสอบและเลือกดาวน์โหลด CSV
+            with st.expander("📋 ตรวจสอบและเลือกดาวน์โหลดตารางข้อมูล CSV"):
+                st.dataframe(df)
+                
+                st.markdown("---")
+                st.markdown("##### 📥 ตัวเลือกการดาวน์โหลดไฟล์ CSV")
+                
+                col_opt1, col_opt2 = st.columns([2, 1])
+                with col_opt1:
+                    custom_filename = st.text_input(
+                        "ตั้งชื่อไฟล์ดาวน์โหลด:", 
+                        value="combined_recorder_nb3_max_data.csv"
+                    )
+                    if not custom_filename.endswith('.csv'):
+                        custom_filename += '.csv'
+                        
+                with col_opt2:
+                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                    csv_bytes = df.to_csv(index=False).encode('utf-8-sig', errors='ignore')
+                    st.download_button(
+                        label="📄 ดาวน์โหลดไฟล์ CSV",
+                        data=csv_bytes,
+                        file_name=custom_filename,
+                        mime="text/csv",
+                        use_container_width=True
+                    )
 
     except Exception as e:
         st.error(f"❌ เกิดข้อผิดพลาดในการประมวลผลไฟล์: {e}")
