@@ -5,7 +5,7 @@ import streamlit as st
 import re
 import io
 
-# 1. ตั้งค่า Page Config
+# 1. Page Config
 st.set_page_config(
     page_title="Recorder NB3 Furnace",
     page_icon="🏭",
@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. ปรับแต่ง CSS สำหรับ Dark Mode
+# 2. Dark Mode CSS
 st.markdown("""
     <style>
         header[data-testid="stHeader"] {
@@ -139,7 +139,7 @@ st.markdown("""
 
 st.title("🏭 Recorder NB3 Furnace")
 
-# 3. ฟังก์ชันสแกนและแกะข้อมูลบรรทัดต่อบรรทัดแบบยืดหยุ่นสูง
+# 3. Flexible File Parsing Function
 def parse_single_file(uploaded_file):
     uploaded_file.seek(0)
     raw_bytes = uploaded_file.read()
@@ -204,7 +204,7 @@ def parse_single_file(uploaded_file):
     col0_str = data_df[0].astype(str).str.strip()
     df["DateTime"] = pd.to_datetime(col0_str, errors="coerce", dayfirst=True)
 
-    def extract_series(col_idx, fallback_idx, min_val=-100.0, max_val=10000.0):
+    def extract_series(col_idx, fallback_idx, min_val=-200.0, max_val=10000.0):
         target_idx = col_idx if col_idx is not None else fallback_idx
         if target_idx is not None and target_idx < data_df.shape[1]:
             s = pd.to_numeric(data_df[target_idx], errors="coerce")
@@ -246,7 +246,7 @@ def parse_single_file(uploaded_file):
 
     # 5) Cool Water Temp
     c_cool = find_col_by_keyword(r'3\)TH_CH6Max')
-    df["COOL WATER TEMP"] = extract_series(c_cool, 2 + (19) * 3, min_val=-100.0, max_val=500.0)
+    df["COOL WATER TEMP"] = extract_series(c_cool, 2 + (19) * 3, min_val=-200.0, max_val=1000.0)
 
     valid_df = df.dropna(subset=["DateTime"]).reset_index(drop=True)
     return valid_df
@@ -265,7 +265,7 @@ def process_multiple_files(uploaded_files):
     full_df = full_df.drop_duplicates(subset=["DateTime"]).sort_values("DateTime").reset_index(drop=True)
     return full_df
 
-# ฟังก์ชันแปลง DataFrame เป็น Binary สำหรับดาวน์โหลดเป็นไฟล์ Excel (.xlsx)
+# Function to convert DataFrame to Excel Bytes
 def to_excel_bytes(dataframe):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -276,7 +276,7 @@ def to_excel_bytes(dataframe):
     output.seek(0)
     return output.getvalue()
 
-# 4. ฟังก์ชันตกแต่งสไตล์กราฟ
+# 4. Chart Layout Styling
 def apply_industrial_style(fig, y_title, y_range=None, is_dual_axis=False):
     layout_args = dict(
         template="plotly_dark",
@@ -319,7 +319,7 @@ def apply_industrial_style(fig, y_title, y_range=None, is_dual_axis=False):
         
     fig.update_layout(**layout_args)
 
-# ส่วน Sidebar อัปโหลดไฟล์
+# Sidebar File Upload
 st.sidebar.header("📁 เมนูอัปโหลดข้อมูล")
 
 if st.sidebar.button("🧹 เคลียร์ข้อมูลไฟล์เก่าทั้งหมด"):
@@ -332,7 +332,7 @@ uploaded_files = st.sidebar.file_uploader(
     accept_multiple_files=True
 )
 
-# 5. ส่วนแสดงผลหลัก
+# 5. Main Content Area
 if uploaded_files:
     try:
         raw_df = process_multiple_files(uploaded_files)
@@ -419,7 +419,7 @@ if uploaded_files:
                 st.subheader("4) Oxygen EXIT/ENTRANCE & N2 Flow")
                 fig4 = make_subplots(specs=[[{"secondary_y": True}]])
                 
-                # แกน Y ซ้าย: ppm Oxygen (Scale 0-200 ppm)
+                # Left Y-axis: ppm Oxygen (Scale 0-200 ppm)
                 fig4.add_trace(go.Scatter(
                     x=df["DateTime"], 
                     y=df["Oxygen EXIT"], 
@@ -436,7 +436,7 @@ if uploaded_files:
                     line=dict(color="#A52A2A", width=2)
                 ), secondary_y=False)
 
-                # แกน Y ขวา: N2 Flow Rate (Scale 0-1000)
+                # Right Y-axis: N2 Flow Rate (Scale 0-1000)
                 fig4.add_trace(go.Scatter(
                     x=df["DateTime"], 
                     y=df["N2 Exit"], 
@@ -473,7 +473,7 @@ if uploaded_files:
                 )
                 st.plotly_chart(fig4, use_container_width=True)
 
-            # 5. Cool Water Temp (Scale: -50 ถึง 150 °C)
+            # 5. Cool Water Temp (Scale: -150 to 500 °C)
             if show_g5:
                 st.subheader("5) COOL WATER TEMP")
                 fig5 = go.Figure()
@@ -484,10 +484,10 @@ if uploaded_files:
                     mode="lines", 
                     line=dict(color="#00ecff", width=2)
                 ))
-                apply_industrial_style(fig5, "Cool Water Temp (°C)", y_range=[-50, 150])
+                apply_industrial_style(fig5, "Cool Water Temp (°C)", y_range=[-150, 500])
                 st.plotly_chart(fig5, use_container_width=True)
 
-            # ส่วนตรวจสอบและเลือกดาวน์โหลด Excel
+            # Download Excel Section
             with st.expander("📊 ตรวจสอบและเลือกดาวน์โหลดตารางข้อมูล Excel (.xlsx)"):
                 st.dataframe(df)
                 
