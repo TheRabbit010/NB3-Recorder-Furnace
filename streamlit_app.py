@@ -436,7 +436,7 @@ if uploaded_files:
                     line=dict(color="#A52A2A", width=2)
                 ), secondary_y=False)
 
-                # แกน Y ขวา: N2 Flow Rate (Scale 0-600)
+                # แกน Y ขวา: N2 Flow Rate (Scale 0-1000)
                 fig4.add_trace(go.Scatter(
                     x=df["DateTime"], 
                     y=df["N2 Exit"], 
@@ -462,13 +462,13 @@ if uploaded_files:
                         gridcolor="rgba(255,255,255,0.08)"
                     ),
                     yaxis2=dict(
-                        title=dict(text="N2 Flow Rate [0-600]", font=dict(color="#ADD8E6", size=12)),
+                        title=dict(text="N2 Flow Rate [0-1000]", font=dict(color="#ADD8E6", size=12)),
                         tickfont=dict(color="#ADD8E6", size=10),
                         showgrid=False,
                         overlaying="y",
                         side="right",
                         linecolor="#ADD8E6",
-                        range=[0, 600]
+                        range=[0, 1000]
                     )
                 )
                 st.plotly_chart(fig4, use_container_width=True)
