@@ -212,41 +212,41 @@ def parse_single_file(uploaded_file):
             return s
         return pd.Series([None] * len(data_df))
 
-    # 1) Top Zone (1)TH_CH1Max -> 1)TH_CH7Max
+    # 1) Top Zone #1 - #7
     for i in range(1, 8):
         c = find_col_by_keyword(rf'1\)TH_CH{i}Max')
         fb = 2 + (i - 1) * 3
-        df[f"1)TH_CH{i} Top"] = extract_series(c, fb, min_val=0.0, max_val=1200.0)
+        df[f"Top Zone #{i}"] = extract_series(c, fb, min_val=0.0, max_val=1200.0)
 
-    # 2) Bottom Zone 2)TH_CH1Max -> 2)TH_CH7Max
+    # 2) Bottom Zone #1 - #7
     for i in range(1, 8):
         c = find_col_by_keyword(rf'2\)TH_CH{i}Max')
         fb = 2 + (7 + i - 1) * 3
-        df[f"2)TH_CH{i} Bottom"] = extract_series(c, fb, min_val=0.0, max_val=1200.0)
+        df[f"Bottom Zone #{i}"] = extract_series(c, fb, min_val=0.0, max_val=1200.0)
 
-    # 3) DRYOFF1-3 (3)TH_CH1Max -> 3)TH_CH3Max
+    # 3) DRYOFF1-3
     dryoff_names = ["DRYOFF1", "DRYOFF2", "DRYOFF3"]
     for i in range(1, 4):
         c = find_col_by_keyword(rf'3\)TH_CH{i}Max')
         fb = 2 + (14 + i - 1) * 3
-        df[f"3)TH_CH{i} ({dryoff_names[i-1]})"] = extract_series(c, fb, min_val=0.0, max_val=1000.0)
+        df[dryoff_names[i-1]] = extract_series(c, fb, min_val=0.0, max_val=1000.0)
 
-    # 4) Oxygen & N2 Flow (ใช้ค่า Max)
+    # 4) Oxygen & N2 Flow
     c_o2_exit = find_col_by_keyword(r'3\)TH_CH4Max')
-    df["3)TH_CH4 (ppm Oxygen EXIT)"] = extract_series(c_o2_exit, 2 + (17) * 3, min_val=0.0, max_val=2000.0)
+    df["Oxygen EXIT"] = extract_series(c_o2_exit, 2 + (17) * 3, min_val=0.0, max_val=2000.0)
 
     c_o2_ent = find_col_by_keyword(r'3\)TH_CH5Max')
-    df["3)TH_CH5 (ppm Oxygen ENTRANCE)"] = extract_series(c_o2_ent, 2 + (18) * 3, min_val=0.0, max_val=2000.0)
+    df["Oxygen ENTRANCE"] = extract_series(c_o2_ent, 2 + (18) * 3, min_val=0.0, max_val=2000.0)
 
     c_n2_exit = find_col_by_keyword(r'3\)TH_CH7Max')
-    df["3)TH_CH7 (N2 Exit)"] = extract_series(c_n2_exit, 2 + (20) * 3, min_val=0.0, max_val=20000.0)
+    df["N2 Exit"] = extract_series(c_n2_exit, 2 + (20) * 3, min_val=0.0, max_val=20000.0)
 
     c_n2_ent = find_col_by_keyword(r'3\)TH_CH8Max')
-    df["3)TH_CH8 (N2 Entrance)"] = extract_series(c_n2_ent, 2 + (21) * 3, min_val=0.0, max_val=20000.0)
+    df["N2 Entrance"] = extract_series(c_n2_ent, 2 + (21) * 3, min_val=0.0, max_val=20000.0)
 
-    # 5) Cool Water Temp (ใช้ค่า Max)
+    # 5) Cool Water Temp
     c_cool = find_col_by_keyword(r'3\)TH_CH6Max')
-    df["3)TH_CH6 (COOL WATER TEMP)"] = extract_series(c_cool, 2 + (19) * 3, min_val=-50.0, max_val=200.0)
+    df["COOL WATER TEMP"] = extract_series(c_cool, 2 + (19) * 3, min_val=-50.0, max_val=200.0)
 
     valid_df = df.dropna(subset=["DateTime"]).reset_index(drop=True)
     return valid_df
@@ -359,55 +359,55 @@ if uploaded_files:
             df = raw_df[(raw_df["DateTime"] >= selected_time[0]) & (raw_df["DateTime"] <= selected_time[1])].copy()
 
             st.sidebar.subheader("📊 เลือกกลุ่มกราฟ")
-            show_g1 = st.sidebar.checkbox("1. Top Zone Temp (1)TH_CH1-CH7 [Max]", value=True)
-            show_g2 = st.sidebar.checkbox("2. Bottom Zone Temp (2)TH_CH1-CH7 [Max]", value=True)
-            show_g3 = st.sidebar.checkbox("3. DRYOFF Temp (3)TH_CH1-CH3 [Max]", value=True)
-            show_g4 = st.sidebar.checkbox("4. ppm Oxygen & N2 Flow (3)TH_CH4,5,7,8 [Max]", value=True)
-            show_g5 = st.sidebar.checkbox("5. Cool Water Temp (3)TH_CH6 [Max]", value=True)
+            show_g1 = st.sidebar.checkbox("1. Top Zone Temp", value=True)
+            show_g2 = st.sidebar.checkbox("2. Bottom Zone Temp", value=True)
+            show_g3 = st.sidebar.checkbox("3. DRYOFF Temp", value=True)
+            show_g4 = st.sidebar.checkbox("4. ppm Oxygen & N2 Flow", value=True)
+            show_g5 = st.sidebar.checkbox("5. Cool Water Temp", value=True)
 
-            # 1. Top Zone Temp (CH1 - CH7)
+            # 1. Top Zone Temp (#1 - #7)
             if show_g1:
-                st.subheader("1) Top Zone Temperature (Max): 1)TH_CH1 to 1)TH_CH7")
+                st.subheader("1) Top Zone Temperature (#1 to #7)")
                 fig1 = go.Figure()
                 top_colors = ["#FF0000", "#008000", "#0000FF", "#8A2BE2", "#A52A2A", "#FFA500", "#9ACD32"]
                 for i in range(1, 8):
                     fig1.add_trace(go.Scatter(
                         x=df["DateTime"], 
-                        y=df[f"1)TH_CH{i} Top"], 
-                        name=f"1)TH_CH{i} Top", 
+                        y=df[f"Top Zone #{i}"], 
+                        name=f"Top Zone #{i}", 
                         mode="lines", 
                         line=dict(color=top_colors[i-1], width=2)
                     ))
                 apply_industrial_style(fig1, "Temperature (°C)")
                 st.plotly_chart(fig1, use_container_width=True)
 
-            # 2. Bottom Zone Temp (CH1 - CH7)
+            # 2. Bottom Zone Temp (#1 - #7)
             if show_g2:
-                st.subheader("2) Bottom Zone Temperature (Max): 2)TH_CH1 to 2)TH_CH7")
+                st.subheader("2) Bottom Zone Temperature (#1 to #7)")
                 fig2 = go.Figure()
                 bottom_colors = ["#E0FFFF", "#FF1493", "#808080", "#00FF00", "#008000", "#0000FF", "#8A2BE2"]
                 for i in range(1, 8):
                     fig2.add_trace(go.Scatter(
                         x=df["DateTime"], 
-                        y=df[f"2)TH_CH{i} Bottom"], 
-                        name=f"2)TH_CH{i} Bottom", 
+                        y=df[f"Bottom Zone #{i}"], 
+                        name=f"Bottom Zone #{i}", 
                         mode="lines", 
                         line=dict(color=bottom_colors[i-1], width=2)
                     ))
                 apply_industrial_style(fig2, "Temperature (°C)")
                 st.plotly_chart(fig2, use_container_width=True)
 
-            # 3. DRYOFF1-3 (3)TH_CH1 to 3)TH_CH3
+            # 3. DRYOFF1-3
             if show_g3:
-                st.subheader("3) DRYOFF Temperature (Max): 3)TH_CH1 to 3)TH_CH3 (DRYOFF1-3)")
+                st.subheader("3) DRYOFF Temperature (DRYOFF1 to DRYOFF3)")
                 fig3 = go.Figure()
                 dry_colors = ["#FFA500", "#9ACD32", "#00ECFF"]
                 dryoff_names = ["DRYOFF1", "DRYOFF2", "DRYOFF3"]
                 for i in range(1, 4):
                     fig3.add_trace(go.Scatter(
                         x=df["DateTime"], 
-                        y=df[f"3)TH_CH{i} ({dryoff_names[i-1]})"], 
-                        name=f"3)TH_CH{i} ({dryoff_names[i-1]})", 
+                        y=df[dryoff_names[i-1]], 
+                        name=dryoff_names[i-1], 
                         mode="lines", 
                         line=dict(color=dry_colors[i-1], width=2)
                     ))
@@ -416,37 +416,39 @@ if uploaded_files:
 
             # 4. ppm Oxygen & N2 Flow Rate (Dual Axis)
             if show_g4:
-                st.subheader("4) Oxygen EXIT/ENTRANCE & N2 Flow (Max) (3)TH_CH4, CH5, CH7, CH8)")
+                st.subheader("4) Oxygen EXIT/ENTRANCE & N2 Flow")
                 fig4 = make_subplots(specs=[[{"secondary_y": True}]])
                 
+                # แกน Y ซ้าย: ppm Oxygen (Scale 0-200 ppm)
                 fig4.add_trace(go.Scatter(
                     x=df["DateTime"], 
-                    y=df["3)TH_CH4 (ppm Oxygen EXIT)"], 
-                    name="3)TH_CH4 (Oxygen EXIT)", 
+                    y=df["Oxygen EXIT"], 
+                    name="Oxygen EXIT", 
                     mode="lines", 
                     line=dict(color="#FF80FF", width=2)
                 ), secondary_y=False)
                 
                 fig4.add_trace(go.Scatter(
                     x=df["DateTime"], 
-                    y=df["3)TH_CH5 (ppm Oxygen ENTRANCE)"], 
-                    name="3)TH_CH5 (Oxygen ENTRANCE)", 
+                    y=df["Oxygen ENTRANCE"], 
+                    name="Oxygen ENTRANCE", 
                     mode="lines", 
                     line=dict(color="#A52A2A", width=2)
                 ), secondary_y=False)
 
+                # แกน Y ขวา: N2 Flow Rate (Scale 0-50)
                 fig4.add_trace(go.Scatter(
                     x=df["DateTime"], 
-                    y=df["3)TH_CH7 (N2 Exit)"], 
-                    name="3)TH_CH7 (N2 Exit)", 
+                    y=df["N2 Exit"], 
+                    name="N2 Exit", 
                     mode="lines", 
                     line=dict(color="#ADD8E6", width=2, dash="dash")
                 ), secondary_y=True)
 
                 fig4.add_trace(go.Scatter(
                     x=df["DateTime"], 
-                    y=df["3)TH_CH8 (N2 Entrance)"], 
-                    name="3)TH_CH8 (N2 Entrance)", 
+                    y=df["N2 Entrance"], 
+                    name="N2 Entrance", 
                     mode="lines", 
                     line=dict(color="#00FF00", width=2, dash="dash")
                 ), secondary_y=True)
@@ -460,25 +462,25 @@ if uploaded_files:
                         gridcolor="rgba(255,255,255,0.08)"
                     ),
                     yaxis2=dict(
-                        title=dict(text="N2 Flow Rate (Free Scale)", font=dict(color="#ADD8E6", size=12)),
+                        title=dict(text="N2 Flow Rate", font=dict(color="#ADD8E6", size=12)),
                         tickfont=dict(color="#ADD8E6", size=10),
                         showgrid=False,
                         overlaying="y",
                         side="right",
                         linecolor="#ADD8E6",
-                        autorange=True
+                        range=[0, 50]
                     )
                 )
                 st.plotly_chart(fig4, use_container_width=True)
 
-            # 5. Cool Water Temp (3)TH_CH6
+            # 5. Cool Water Temp
             if show_g5:
-                st.subheader("5) COOL WATER TEMP (Max): 3)TH_CH6")
+                st.subheader("5) COOL WATER TEMP")
                 fig5 = go.Figure()
                 fig5.add_trace(go.Scatter(
                     x=df["DateTime"], 
-                    y=df["3)TH_CH6 (COOL WATER TEMP)"], 
-                    name="3)TH_CH6 (COOL WATER TEMP)", 
+                    y=df["COOL WATER TEMP"], 
+                    name="COOL WATER TEMP", 
                     mode="lines", 
                     line=dict(color="#00ecff", width=2)
                 ))
@@ -496,7 +498,7 @@ if uploaded_files:
                 with col_opt1:
                     custom_filename = st.text_input(
                         "ตั้งชื่อไฟล์ดาวน์โหลด:", 
-                        value="combined_recorder_nb3_max_data.xlsx"
+                        value="combined_recorder_nb3_data.xlsx"
                     )
                     if not custom_filename.endswith('.xlsx'):
                         custom_filename += '.xlsx'
